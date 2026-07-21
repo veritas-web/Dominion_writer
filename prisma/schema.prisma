@@ -1,0 +1,162 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  fullName     String?
+  passwordHash String?
+  ageConfirmed Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  apiKeys  ApiKey[]
+  books    Book[]
+  accounts Account[]
+  sessions Session[]
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model ApiKey {
+  id            String    @id @default(cuid())
+  userId        String
+  provider      String    // openai, anthropic, google, xai, mistral, deepseek, cohere
+  encryptedKey  String
+  label         String?
+  isDefault     Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Book {
+  id                  String    @id @default(cuid())
+  userId              String
+  title               String
+  subtitle            String?
+  authorName          String?
+  bookType            String    @default("fiction") // fiction, non_fiction
+  style               String    @default("professional") // professional, entertaining, novel, crime, mystery, childrens, other
+  styleOtherText      String?
+  language            String    @default("English")
+  wordCountTarget     Int?
+  description         String?
+  coverUrl            String?
+  status              String    @default("draft") // draft, writing, editing, complete
+  bibliographyFormat  String    @default("none") // apa, mla, chicago, none
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  lastAutosavedAt     DateTime?
+
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chapters           Chapter[]
+  frontMatter        FrontMatter[]
+  backMatter         BackMatter[]
+  glossaryTerms      GlossaryTerm[]
+  bibliographyEntries BibliographyEntry[]
+  exportHistory      ExportHistory[]
+}
+
+model Chapter {
+  id         String   @id @default(cuid())
+  bookId     String
+  title      String
+  content    String   @default("") // HTML content from TipTap
+  orderIndex Int      @default(0)
+  wordCount  Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
+
+model FrontMatter {
+  id         String @id @default(cuid())
+  bookId     String
+  type       String // title_page, dedication, acknowledgements, preface
+  content    String @default("")
+  orderIndex Int    @default(0)
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
+
+model BackMatter {
+  id         String @id @default(cuid())
+  bookId     String
+  type       String // afterword, about_author
+  content    String @default("")
+  orderIndex Int    @default(0)
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
+
+model GlossaryTerm {
+  id         String @id @default(cuid())
+  bookId     String
+  term       String
+  definition String
+  orderIndex Int    @default(0)
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
+
+model BibliographyEntry {
+  id           String @id @default(cuid())
+  bookId       String
+  citationText String
+  format       String // apa, mla, chicago
+  orderIndex   Int    @default(0)
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
+
+model ExportHistory {
+  id        String   @id @default(cuid())
+  bookId    String
+  format    String   // pdf, docx, epub
+  fileUrl   String?
+  createdAt DateTime @default(now())
+
+  book Book @relation(fields: [bookId], references: [id], onDelete: Cascade)
+}
