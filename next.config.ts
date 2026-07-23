@@ -7,9 +7,6 @@ const nextConfig: NextConfig = {
     ignoreBuildErrors: true,
   },
   reactStrictMode: false,
-  devIndicators: {
-    buildActivity: false,
-  },
 };
 
 export default nextConfig;
