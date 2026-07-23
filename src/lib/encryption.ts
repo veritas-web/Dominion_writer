@@ -1,3 +1,5 @@
+import crypto from 'crypto'
+
 const ENCRYPTION_KEY = process.env.ENCRYPTION_KEY || 'dominion-writer-default-key-change-in-prod-32b!'
 
 function getKeyBuffer(): Buffer {

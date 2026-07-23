@@ -3,7 +3,8 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const { bookId, title, content, orderIndex, action } = await request.json()
+    const body = await request.json()
+    const { bookId, title, content, orderIndex, action } = body
 
     if (action === 'create') {
       const maxOrder = await db.chapter.findFirst({
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
     }
 
     if (action === 'update') {
-      const { id, content: chapterContent, title: chapterTitle } = await request.json()
+      const { id, content: chapterContent, title: chapterTitle } = body
       const wordCount = chapterContent ? chapterContent.replace(/<[^>]*>/g, '').split(/\s+/).filter(Boolean).length : undefined
       const chapter = await db.chapter.update({
         where: { id },

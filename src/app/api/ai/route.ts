@@ -40,6 +40,10 @@ async function callAI(userId: string, prompt: string, task: 'draft' | 'edit' | '
     })
     const json = await res.json()
     if (json.error) throw new Error(json.error.message)
+    if (!json.candidates || !json.candidates[0] || !json.candidates[0].content) {
+      console.error('Gemini API unexpected response:', json)
+      throw new Error('Gemini API returned unexpected response')
+    }
     return json.candidates[0].content.parts[0].text
   }
 
@@ -92,13 +96,43 @@ async function callAI(userId: string, prompt: string, task: 'draft' | 'edit' | '
 
 export async function POST(request: Request) {
   try {
-    const { userId, prompt, task } = await request.json()
-    if (!userId || !prompt) {
-      return NextResponse.json({ error: 'User ID and prompt required' }, { status: 400 })
+    let body;
+    try {
+      body = await request.json()
+    } catch (e) {
+      return NextResponse.json({ error: 'Invalid JSON payload' }, { status: 400 })
     }
-    const result = await callAI(userId, prompt, task || 'draft')
+
+    const { userId, prompt, task, title, genre, style, bookType } = body
+    
+    if (!userId) {
+      return NextResponse.json({ error: 'User ID is required' }, { status: 400 })
+    }
+
+    let finalPrompt = prompt
+    if (!finalPrompt) {
+      // Fallback defaults if prompt is missing but other params are provided
+      if (task === 'front_matter') {
+        finalPrompt = `Write the front matter (e.g., dedication, preface) for a ${style || ''} ${genre || bookType || 'book'} titled "${title || 'Untitled'}".`
+      } else if (task === 'back_matter') {
+        finalPrompt = `Write the back matter (e.g., afterword, author note) for a ${style || ''} ${genre || bookType || 'book'} titled "${title || 'Untitled'}".`
+      } else {
+        return NextResponse.json({ error: 'Prompt is required' }, { status: 400 })
+      }
+    }
+
+    const result = await callAI(userId, finalPrompt, task || 'draft')
     return NextResponse.json({ content: result })
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 500 })
+    console.error('AI API Error:', error)
+    const msg = error.message || '';
+    const isClientError = msg === 'No API keys configured' || 
+                          msg.includes('Unsupported provider') || 
+                          msg.includes('API key not valid') ||
+                          msg.includes('Quota exceeded') ||
+                          msg.includes('rate limit') ||
+                          msg.includes('Gemini API returned unexpected');
+                          
+    return NextResponse.json({ error: msg || 'Internal Server Error' }, { status: isClientError ? 400 : 500 })
   }
 }

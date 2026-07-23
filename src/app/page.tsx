@@ -14,7 +14,7 @@ import { DashboardPage } from '@/components/dashboard/dashboard-page'
 import { BookWizard } from '@/components/wizard/book-wizard'
 import { BookEditor } from '@/components/editor/book-editor'
 import { Footer } from '@/components/landing/footer'
-import { Loader2 } from 'lucide-react'
+import { BookOpen, Sparkles, LayoutDashboard, User, LogOut, LogIn } from 'lucide-react'
 
 function AppContent() {
   const { data: session, status } = useSession()
@@ -40,14 +40,32 @@ function AppContent() {
 
   if (!mounted || status === 'loading') {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: '#0B0F19' }}>
-        <Loader2 className="w-8 h-8 animate-spin text-[#3B82F6]" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: '#080C14' }}>
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative w-16 h-16">
+            <div className="absolute inset-0 rounded-full animate-pulse"
+              style={{ background: 'rgba(79,142,247,0.15)', border: '1px solid rgba(79,142,247,0.3)' }} />
+            <div className="absolute inset-0 flex items-center justify-center">
+              <BookOpen className="w-8 h-8" style={{ color: '#4F8EF7' }} />
+            </div>
+          </div>
+          <div className="flex gap-1.5">
+            {[0,1,2].map(i => (
+              <div key={i} className="w-1.5 h-1.5 rounded-full animate-bounce"
+                style={{ background: '#4F8EF7', animationDelay: `${i * 0.15}s` }} />
+            ))}
+          </div>
+        </div>
       </div>
     )
   }
 
   const showFooter = ['landing', 'about', 'privacy', 'terms', 'login', 'signup'].includes(currentView)
   const showHeader = !['editor'].includes(currentView)
+
+  const userInitials = session?.user?.name
+    ? session.user.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2)
+    : session?.user?.email?.[0]?.toUpperCase() || '?'
 
   const renderView = () => {
     switch (currentView) {
@@ -66,43 +84,129 @@ function AppContent() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col" style={{ background: '#0B0F19' }}>
+    <div className="min-h-screen flex flex-col" style={{ background: '#080C14' }}>
       {showHeader && (
-        <header className="sticky top-0 z-50 border-b backdrop-blur-xl" style={{ background: 'rgba(11, 15, 25, 0.85)', borderColor: '#1E293B' }}>
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-14 flex items-center justify-between">
-            <button onClick={() => setView('landing')} className="flex items-center gap-2 hover:opacity-80 transition-opacity">
-              <span className="text-xl font-bold gradient-text">Dominion Writer</span>
+        <header className="sticky top-0 z-50 site-header">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-4">
+            {/* Logo */}
+            <button
+              onClick={() => setView('landing')}
+              className="flex items-center gap-2.5 group shrink-0"
+            >
+              <div
+                className="w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300 group-hover:scale-110"
+                style={{
+                  background: 'linear-gradient(135deg, rgba(79,142,247,0.2), rgba(155,114,248,0.2))',
+                  border: '1px solid rgba(79,142,247,0.3)',
+                }}
+              >
+                <BookOpen className="w-4 h-4" style={{ color: '#4F8EF7' }} />
+              </div>
+              <span className="text-lg font-bold" style={{ fontFamily: "'Outfit', sans-serif", color: '#EEF2FF' }}>
+                Dominion <span className="gradient-text-static">Writer</span>
+              </span>
             </button>
-            <nav className="hidden sm:flex items-center gap-1">
-              <button onClick={() => setView('about')} className="px-3 py-1.5 text-sm rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#1E293B] transition-all">About</button>
-              <button onClick={() => setView('privacy')} className="px-3 py-1.5 text-sm rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#1E293B] transition-all">Privacy</button>
-              <button onClick={() => setView('terms')} className="px-3 py-1.5 text-sm rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#1E293B] transition-all">Terms</button>
+
+            {/* Center nav */}
+            <nav
+              className="hidden md:flex items-center gap-1 px-3 py-1.5 rounded-full"
+              style={{ background: 'rgba(26,37,64,0.4)', border: '1px solid rgba(26,37,64,0.8)' }}
+            >
+              <button onClick={() => setView('about')} className="nav-pill">About</button>
+              <button onClick={() => setView('privacy')} className="nav-pill">Privacy</button>
+              <button onClick={() => setView('terms')} className="nav-pill">Terms</button>
             </nav>
-            <div className="flex items-center gap-2">
+
+            {/* Right: actions */}
+            <div className="flex items-center gap-2 shrink-0">
               {session ? (
                 <>
-                  <button onClick={() => setView('dashboard')} className="px-3 py-1.5 text-sm rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#1E293B] transition-all hidden sm:block">Dashboard</button>
-                  <button onClick={() => setView('profile')} className="px-3 py-1.5 text-sm rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#1E293B] transition-all hidden sm:block">Profile</button>
-                  <span className="px-2 py-1 text-xs rounded bg-[#1E293B] text-[#94A3B8] hidden md:block max-w-[160px] truncate">{session.user?.email}</span>
-                  <button onClick={handleLogout} className="px-3 py-1.5 text-sm rounded-lg text-red-400 hover:text-red-300 hover:bg-red-950/30 transition-all">Sign Out</button>
+                  <button
+                    onClick={() => setView('dashboard')}
+                    className="hidden sm:flex items-center gap-1.5 nav-pill"
+                  >
+                    <LayoutDashboard className="w-3.5 h-3.5" />
+                    Dashboard
+                  </button>
+                  <button
+                    onClick={() => setView('profile')}
+                    className="hidden sm:flex items-center gap-1.5 nav-pill"
+                  >
+                    <User className="w-3.5 h-3.5" />
+                    Profile
+                  </button>
+                  <div
+                    className="w-8 h-8 rounded-full items-center justify-center text-xs font-bold shrink-0 hidden md:flex"
+                    style={{ background: 'linear-gradient(135deg, #4F8EF7, #9B72F8)', color: '#fff' }}
+                  >
+                    {userInitials}
+                  </div>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-1.5 px-3.5 py-2 rounded-full text-sm font-medium transition-all duration-200"
+                    style={{
+                      background: 'rgba(248,113,113,0.1)',
+                      border: '1px solid rgba(248,113,113,0.2)',
+                      color: '#F87171',
+                    }}
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Sign Out</span>
+                  </button>
                 </>
               ) : (
                 <>
-                  <button onClick={() => setView('login')} className="px-3 py-1.5 text-sm rounded-lg text-[#94A3B8] hover:text-[#E2E8F0] hover:bg-[#1E293B] transition-all">Sign In</button>
-                  <button onClick={() => setView('signup')} className="gradient-btn px-4 py-1.5 text-sm rounded-lg text-white font-medium">Get Started</button>
+                  <button
+                    onClick={() => setView('login')}
+                    className="flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-medium transition-all duration-200"
+                    style={{ color: '#8899BB' }}
+                  >
+                    <LogIn className="w-3.5 h-3.5" />
+                    Sign In
+                  </button>
+                  <button
+                    onClick={() => setView('signup')}
+                    className="gradient-btn flex items-center gap-1.5 px-4 py-2 rounded-full text-sm font-semibold text-white"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    Get Started
+                  </button>
                 </>
               )}
             </div>
           </div>
+
           {/* Mobile nav */}
-          <div className="sm:hidden flex items-center gap-1 px-4 pb-2 overflow-x-auto">
-            <button onClick={() => setView('about')} className="px-2 py-1 text-xs rounded text-[#94A3B8] hover:text-[#E2E8F0] whitespace-nowrap">About</button>
-            <button onClick={() => setView('privacy')} className="px-2 py-1 text-xs rounded text-[#94A3B8] hover:text-[#E2E8F0] whitespace-nowrap">Privacy</button>
-            <button onClick={() => setView('terms')} className="px-2 py-1 text-xs rounded text-[#94A3B8] hover:text-[#E2E8F0] whitespace-nowrap">Terms</button>
+          <div
+            className="md:hidden flex items-center gap-1 px-4 pb-2.5 overflow-x-auto custom-scrollbar"
+            style={{ borderTop: '1px solid rgba(26,37,64,0.5)' }}
+          >
+            {['about', 'privacy', 'terms'].map(v => (
+              <button
+                key={v}
+                onClick={() => setView(v as any)}
+                className="px-3 py-1 text-xs rounded-full whitespace-nowrap capitalize font-medium"
+                style={{ color: '#8899BB', background: 'rgba(26,37,64,0.4)' }}
+              >
+                {v}
+              </button>
+            ))}
             {session && (
               <>
-                <button onClick={() => setView('dashboard')} className="px-2 py-1 text-xs rounded text-[#94A3B8] hover:text-[#E2E8F0] whitespace-nowrap">Dashboard</button>
-                <button onClick={() => setView('profile')} className="px-2 py-1 text-xs rounded text-[#94A3B8] hover:text-[#E2E8F0] whitespace-nowrap">Profile</button>
+                <button
+                  onClick={() => setView('dashboard')}
+                  className="px-3 py-1 text-xs rounded-full whitespace-nowrap font-medium"
+                  style={{ color: '#8899BB', background: 'rgba(26,37,64,0.4)' }}
+                >
+                  Dashboard
+                </button>
+                <button
+                  onClick={() => setView('profile')}
+                  className="px-3 py-1 text-xs rounded-full whitespace-nowrap font-medium"
+                  style={{ color: '#8899BB', background: 'rgba(26,37,64,0.4)' }}
+                >
+                  Profile
+                </button>
               </>
             )}
           </div>
