@@ -5,7 +5,7 @@ import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import TextAlign from '@tiptap/extension-text-align'
 import Underline from '@tiptap/extension-underline'
-import Image from '@tiptap/extension-image'
+import { ResizableImage } from './extensions/resizable-image'
 import Placeholder from '@tiptap/extension-placeholder'
 import Highlight from '@tiptap/extension-highlight'
 import { TextStyle } from '@tiptap/extension-text-style'
@@ -134,7 +134,7 @@ export function BookEditor({ bookId }: { bookId: string }) {
   const editor = useEditor({
     extensions: [
       StarterKit, TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      Underline, Image, Placeholder.configure({ placeholder: 'Start writing your chapter...' }),
+      Underline, ResizableImage, Placeholder.configure({ placeholder: 'Start writing your chapter...' }),
       Highlight, TextStyle, Color,
     ],
     content: selectedChapter?.content || '<p></p>',
@@ -170,12 +170,15 @@ export function BookEditor({ bookId }: { bookId: string }) {
     if (editor && selectedChapter) {
       const currentContent = editor.getHTML()
       if (currentContent !== selectedChapter.content) {
-        editor.commands.setContent(selectedChapter.content || '<p></p>')
+        setTimeout(() => editor.commands.setContent(selectedChapter.content || '<p></p>'), 0)
       }
     } else if (editor && selectedMatter) {
       const matterList = selectedMatter.type === 'front' ? book?.frontMatter : book?.backMatter
       const matter = matterList?.find(m => m.type === selectedMatter.kind)
-      editor.commands.setContent(matter?.content || '<p></p>')
+      const targetContent = matter?.content || '<p></p>'
+      if (editor.getHTML() !== targetContent) {
+        setTimeout(() => editor.commands.setContent(targetContent), 0)
+      }
     }
   }, [selectedChapterId, selectedMatter, editor])
 
@@ -199,11 +202,30 @@ export function BookEditor({ bookId }: { bookId: string }) {
         } : prev)
       } else if (selectedMatter) {
         const content = editor.getHTML()
-        await fetch(`/api/books/${bookId}/matter`, {
+        const res = await fetch(`/api/books/${bookId}/matter`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ bookId, type: selectedMatter.kind, content, action: selectedMatter.type === 'front' ? 'upsert-front' : 'upsert-back' }),
         })
+        if (res.ok) {
+          const savedMatter = await res.json()
+          setBook(prev => {
+            if (!prev) return prev
+            if (selectedMatter.type === 'front') {
+              const exists = prev.frontMatter.find(m => m.type === selectedMatter.kind)
+              const newFront = exists 
+                ? prev.frontMatter.map(m => m.type === selectedMatter.kind ? savedMatter : m)
+                : [...prev.frontMatter, savedMatter]
+              return { ...prev, frontMatter: newFront, lastAutosavedAt: new Date().toISOString() }
+            } else {
+              const exists = prev.backMatter.find(m => m.type === selectedMatter.kind)
+              const newBack = exists 
+                ? prev.backMatter.map(m => m.type === selectedMatter.kind ? savedMatter : m)
+                : [...prev.backMatter, savedMatter]
+              return { ...prev, backMatter: newBack, lastAutosavedAt: new Date().toISOString() }
+            }
+          })
+        }
       }
       setLastSaved(new Date())
     } catch { /* silent */ }

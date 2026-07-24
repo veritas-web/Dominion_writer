@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 
 export async function POST(request: Request) {
   try {
-    const { bookId, type, section, content, orderIndex, action } = await request.json()
+    const { bookId, type, section, content, orderIndex, action, term } = await request.json()
 
     if (action === 'upsert-front') {
       const existing = await db.frontMatter.findFirst({ where: { bookId, type } })
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     if (action === 'add-glossary') {
       const maxOrder = await db.glossaryTerm.findFirst({ where: { bookId }, orderBy: { orderIndex: 'desc' }, select: { orderIndex: true } })
       const nextOrder = (maxOrder?.orderIndex ?? -1) + 1
-      const term = await db.glossaryTerm.create({ data: { bookId, term, definition: content, orderIndex: nextOrder } })
-      return NextResponse.json(term)
+      const newTerm = await db.glossaryTerm.create({ data: { bookId, term, definition: content, orderIndex: nextOrder } })
+      return NextResponse.json(newTerm)
     }
 
     if (action === 'add-bibliography') {
