@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useCallback, useSyncExternalStore } from 'react'
-import { useSession, SessionProvider } from 'next-auth/react'
+import { useSession, signOut, SessionProvider } from 'next-auth/react'
 import { useAppStore } from '@/store/app-store'
 import { LandingPage } from '@/components/landing/landing-page'
 import { AboutPage } from '@/components/legal/about-page'
@@ -32,10 +32,8 @@ function AppContent() {
   }, [status, session, setUser])
 
   const handleLogout = useCallback(async () => {
-    try {
-      await fetch('/api/auth/signout', { method: 'POST' })
-    } catch {}
     logout()
+    await signOut({ redirect: false })
   }, [logout])
 
   if (!mounted || status === 'loading') {

@@ -1,13 +1,372 @@
-import { PrismaClient } from '@prisma/client'
+import { createClient } from '@supabase/supabase-js'
+import fs from 'fs'
+import path from 'path'
 
-const globalForPrisma = globalThis as unknown as {
-  prisma: PrismaClient | undefined
+function getEnvVar(key: string): string {
+  if (process.env[key]) return process.env[key]!
+  try {
+    const envPath = path.join(process.cwd(), '.env')
+    if (fs.existsSync(envPath)) {
+      const content = fs.readFileSync(envPath, 'utf8')
+      for (const line of content.split('\n')) {
+        const [k, ...v] = line.split('=')
+        if (k && k.trim() === key) {
+          return v.join('=').trim().replace(/^["']|["']$/g, '')
+        }
+      }
+    }
+  } catch {}
+  return ''
 }
 
-export const db =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    log: ['query'],
-  })
+const supabaseUrl = getEnvVar('NEXT_PUBLIC_SUPABASE_URL') || getEnvVar('SUPABASE_URL')
+const supabaseKey = getEnvVar('SUPABASE_SERVICE_ROLE_KEY') || getEnvVar('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 
-if (process.env.NODE_ENV !== 'production') globalForPrisma.prisma = db
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false },
+})
+
+const generateId = () => 'c' + Math.random().toString(36).substring(2, 12) + Date.now().toString(36)
+
+export const db = {
+  user: {
+    async findUnique({ where }: { where: { email?: string; id?: string } }) {
+      let query = supabase.from('User').select('*')
+      if (where.email) query = query.eq('email', where.email)
+      if (where.id) query = query.eq('id', where.id)
+      const { data, error } = await query.single()
+      if (error || !data) return null
+      return data
+    },
+    async create({ data }: { data: { email: string; fullName?: string | null; passwordHash?: string | null; ageConfirmed?: boolean } }) {
+      const newUser = {
+        id: generateId(),
+        email: data.email,
+        fullName: data.fullName ?? null,
+        passwordHash: data.passwordHash ?? null,
+        ageConfirmed: data.ageConfirmed ?? false,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      const { data: created, error } = await supabase.from('User').insert(newUser).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+  },
+
+  apiKey: {
+    async findMany({ where, orderBy }: { where: { userId: string }; orderBy?: { createdAt?: 'asc' | 'desc' } }) {
+      let query = supabase.from('ApiKey').select('*').eq('userId', where.userId)
+      if (orderBy?.createdAt) {
+        query = query.order('createdAt', { ascending: orderBy.createdAt === 'asc' })
+      }
+      const { data, error } = await query
+      if (error) throw new Error(error.message)
+      return data || []
+    },
+    async updateMany({ where, data }: { where: { userId: string; isDefault?: boolean }; data: { isDefault: boolean } }) {
+      let query = supabase.from('ApiKey').update(data).eq('userId', where.userId)
+      if (where.isDefault !== undefined) query = query.eq('isDefault', where.isDefault)
+      const { error } = await query
+      if (error) throw new Error(error.message)
+      return { count: 1 }
+    },
+    async create({ data }: { data: { userId: string; provider: string; encryptedKey: string; label?: string | null; isDefault?: boolean } }) {
+      const newKey = {
+        id: generateId(),
+        userId: data.userId,
+        provider: data.provider,
+        encryptedKey: data.encryptedKey,
+        label: data.label ?? null,
+        isDefault: data.isDefault ?? false,
+        createdAt: new Date().toISOString(),
+      }
+      const { data: created, error } = await supabase.from('ApiKey').insert(newKey).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async update({ where, data }: { where: { id: string }; data: { isDefault?: boolean } }) {
+      const { data: updated, error } = await supabase.from('ApiKey').update(data).eq('id', where.id).select().single()
+      if (error) throw new Error(error.message)
+      return updated
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const { error } = await supabase.from('ApiKey').delete().eq('id', where.id)
+      if (error) throw new Error(error.message)
+      return { success: true }
+    },
+  },
+
+  book: {
+    async findMany({ where, orderBy, include }: {
+      where: { userId: string }
+      orderBy?: { updatedAt?: 'asc' | 'desc' }
+      include?: { chapters?: { orderBy?: { orderIndex?: 'asc' | 'desc' } } }
+    }) {
+      let query = supabase.from('Book').select('*').eq('userId', where.userId)
+      if (orderBy?.updatedAt) {
+        query = query.order('updatedAt', { ascending: orderBy.updatedAt === 'asc' })
+      }
+      const { data: books, error } = await query
+      if (error) throw new Error(error.message)
+      if (!books) return []
+
+      if (include?.chapters) {
+        for (const book of books) {
+          const { data: chapters } = await supabase
+            .from('Chapter')
+            .select('*')
+            .eq('bookId', book.id)
+            .order('orderIndex', { ascending: true })
+          book.chapters = chapters || []
+        }
+      }
+      return books
+    },
+    async findUnique({ where, include }: {
+      where: { id: string }
+      include?: {
+        chapters?: { orderBy?: { orderIndex?: 'asc' | 'desc' } }
+        frontMatter?: { orderBy?: { orderIndex?: 'asc' | 'desc' } }
+        backMatter?: { orderBy?: { orderIndex?: 'asc' | 'desc' } }
+        glossaryTerms?: { orderBy?: { orderIndex?: 'asc' | 'desc' } }
+        bibliographyEntries?: { orderBy?: { orderIndex?: 'asc' | 'desc' } }
+      }
+    }) {
+      const { data: book, error } = await supabase.from('Book').select('*').eq('id', where.id).single()
+      if (error || !book) return null
+
+      if (include?.chapters) {
+        const { data: chapters } = await supabase.from('Chapter').select('*').eq('bookId', book.id).order('orderIndex', { ascending: true })
+        book.chapters = chapters || []
+      }
+      if (include?.frontMatter) {
+        const { data: frontMatter } = await supabase.from('FrontMatter').select('*').eq('bookId', book.id).order('orderIndex', { ascending: true })
+        book.frontMatter = frontMatter || []
+      }
+      if (include?.backMatter) {
+        const { data: backMatter } = await supabase.from('BackMatter').select('*').eq('bookId', book.id).order('orderIndex', { ascending: true })
+        book.backMatter = backMatter || []
+      }
+      if (include?.glossaryTerms) {
+        const { data: glossaryTerms } = await supabase.from('GlossaryTerm').select('*').eq('bookId', book.id).order('orderIndex', { ascending: true })
+        book.glossaryTerms = glossaryTerms || []
+      }
+      if (include?.bibliographyEntries) {
+        const { data: bibliographyEntries } = await supabase.from('BibliographyEntry').select('*').eq('bookId', book.id).order('orderIndex', { ascending: true })
+        book.bibliographyEntries = bibliographyEntries || []
+      }
+
+      return book
+    },
+    async create({ data }: {
+      data: {
+        userId: string
+        title: string
+        subtitle?: string | null
+        authorName?: string | null
+        bookType?: string
+        style?: string
+        styleOtherText?: string | null
+        language?: string
+        wordCountTarget?: number | null
+        description?: string | null
+        bibliographyFormat?: string
+      }
+    }) {
+      const newBook = {
+        id: generateId(),
+        userId: data.userId,
+        title: data.title,
+        subtitle: data.subtitle ?? null,
+        authorName: data.authorName ?? null,
+        bookType: data.bookType ?? 'fiction',
+        style: data.style ?? 'professional',
+        styleOtherText: data.styleOtherText ?? null,
+        language: data.language ?? 'English',
+        wordCountTarget: data.wordCountTarget ?? null,
+        description: data.description ?? null,
+        coverUrl: null,
+        status: 'draft',
+        bibliographyFormat: data.bibliographyFormat ?? 'none',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        lastAutosavedAt: null,
+      }
+      const { data: created, error } = await supabase.from('Book').insert(newBook).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async update({ where, data }: { where: { id: string }; data: any }) {
+      const updateData = { ...data }
+      if (updateData.updatedAt instanceof Date) updateData.updatedAt = updateData.updatedAt.toISOString()
+      if (updateData.lastAutosavedAt instanceof Date) updateData.lastAutosavedAt = updateData.lastAutosavedAt.toISOString()
+
+      const { data: updated, error } = await supabase.from('Book').update(updateData).eq('id', where.id).select().single()
+      if (error) throw new Error(error.message)
+      return updated
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const { error } = await supabase.from('Book').delete().eq('id', where.id)
+      if (error) throw new Error(error.message)
+      return { success: true }
+    },
+  },
+
+  chapter: {
+    async findFirst({ where, orderBy }: { where: { bookId: string }; orderBy?: { orderIndex?: 'asc' | 'desc' }; select?: { orderIndex: boolean } }) {
+      let query = supabase.from('Chapter').select('*').eq('bookId', where.bookId)
+      if (orderBy?.orderIndex) {
+        query = query.order('orderIndex', { ascending: orderBy.orderIndex === 'asc' })
+      }
+      const { data } = await query.limit(1)
+      return data && data.length > 0 ? data[0] : null
+    },
+    async create({ data }: { data: { bookId: string; title: string; content?: string; orderIndex: number } }) {
+      const newChapter = {
+        id: generateId(),
+        bookId: data.bookId,
+        title: data.title,
+        content: data.content ?? '',
+        orderIndex: data.orderIndex,
+        wordCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+      const { data: created, error } = await supabase.from('Chapter').insert(newChapter).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async update({ where, data }: { where: { id: string }; data: any }) {
+      const updateData = { ...data }
+      if (updateData.updatedAt instanceof Date) updateData.updatedAt = updateData.updatedAt.toISOString()
+
+      const { data: updated, error } = await supabase.from('Chapter').update(updateData).eq('id', where.id).select().single()
+      if (error) throw new Error(error.message)
+      return updated
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const { error } = await supabase.from('Chapter').delete().eq('id', where.id)
+      if (error) throw new Error(error.message)
+      return { success: true }
+    },
+  },
+
+  frontMatter: {
+    async findFirst({ where }: { where: { bookId: string; type: string } }) {
+      const { data } = await supabase.from('FrontMatter').select('*').eq('bookId', where.bookId).eq('type', where.type).limit(1)
+      return data && data.length > 0 ? data[0] : null
+    },
+    async create({ data }: { data: { bookId: string; type: string; content: string; orderIndex?: number } }) {
+      const newItem = {
+        id: generateId(),
+        bookId: data.bookId,
+        type: data.type,
+        content: data.content,
+        orderIndex: data.orderIndex ?? 0,
+      }
+      const { data: created, error } = await supabase.from('FrontMatter').insert(newItem).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async update({ where, data }: { where: { id: string }; data: any }) {
+      const { data: updated, error } = await supabase.from('FrontMatter').update(data).eq('id', where.id).select().single()
+      if (error) throw new Error(error.message)
+      return updated
+    },
+  },
+
+  backMatter: {
+    async findFirst({ where }: { where: { bookId: string; type: string } }) {
+      const { data } = await supabase.from('BackMatter').select('*').eq('bookId', where.bookId).eq('type', where.type).limit(1)
+      return data && data.length > 0 ? data[0] : null
+    },
+    async create({ data }: { data: { bookId: string; type: string; content: string; orderIndex?: number } }) {
+      const newItem = {
+        id: generateId(),
+        bookId: data.bookId,
+        type: data.type,
+        content: data.content,
+        orderIndex: data.orderIndex ?? 0,
+      }
+      const { data: created, error } = await supabase.from('BackMatter').insert(newItem).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async update({ where, data }: { where: { id: string }; data: any }) {
+      const { data: updated, error } = await supabase.from('BackMatter').update(data).eq('id', where.id).select().single()
+      if (error) throw new Error(error.message)
+      return updated
+    },
+  },
+
+  glossaryTerm: {
+    async findFirst({ where, orderBy }: { where: { bookId: string }; orderBy?: { orderIndex?: 'asc' | 'desc' }; select?: { orderIndex: boolean } }) {
+      let query = supabase.from('GlossaryTerm').select('*').eq('bookId', where.bookId)
+      if (orderBy?.orderIndex) {
+        query = query.order('orderIndex', { ascending: orderBy.orderIndex === 'asc' })
+      }
+      const { data } = await query.limit(1)
+      return data && data.length > 0 ? data[0] : null
+    },
+    async create({ data }: { data: { bookId: string; term: string; definition: string; orderIndex?: number } }) {
+      const newItem = {
+        id: generateId(),
+        bookId: data.bookId,
+        term: data.term,
+        definition: data.definition,
+        orderIndex: data.orderIndex ?? 0,
+      }
+      const { data: created, error } = await supabase.from('GlossaryTerm').insert(newItem).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const { error } = await supabase.from('GlossaryTerm').delete().eq('id', where.id)
+      if (error) throw new Error(error.message)
+      return { success: true }
+    },
+  },
+
+  bibliographyEntry: {
+    async findFirst({ where, orderBy }: { where: { bookId: string }; orderBy?: { orderIndex?: 'asc' | 'desc' }; select?: { orderIndex: boolean } }) {
+      let query = supabase.from('BibliographyEntry').select('*').eq('bookId', where.bookId)
+      if (orderBy?.orderIndex) {
+        query = query.order('orderIndex', { ascending: orderBy.orderIndex === 'asc' })
+      }
+      const { data } = await query.limit(1)
+      return data && data.length > 0 ? data[0] : null
+    },
+    async create({ data }: { data: { bookId: string; citationText: string; format: string; orderIndex?: number } }) {
+      const newItem = {
+        id: generateId(),
+        bookId: data.bookId,
+        citationText: data.citationText,
+        format: data.format,
+        orderIndex: data.orderIndex ?? 0,
+      }
+      const { data: created, error } = await supabase.from('BibliographyEntry').insert(newItem).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+    async delete({ where }: { where: { id: string } }) {
+      const { error } = await supabase.from('BibliographyEntry').delete().eq('id', where.id)
+      if (error) throw new Error(error.message)
+      return { success: true }
+    },
+  },
+
+  exportHistory: {
+    async create({ data }: { data: { bookId: string; format: string; createdAt?: Date } }) {
+      const newItem = {
+        id: generateId(),
+        bookId: data.bookId,
+        format: data.format,
+        createdAt: (data.createdAt || new Date()).toISOString(),
+      }
+      const { data: created, error } = await supabase.from('ExportHistory').insert(newItem).select().single()
+      if (error) throw new Error(error.message)
+      return created
+    },
+  },
+}
