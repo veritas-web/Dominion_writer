@@ -297,13 +297,13 @@ export function LandingPage() {
                   </div>
                 ))}
               </div>
-              <button
-                onClick={() => setView('signup')}
+              <a
+                href="/pricing"
                 className="gradient-btn inline-flex items-center gap-2 mt-10 px-10 py-4 text-lg font-semibold text-white rounded-xl"
               >
                 Get Started Now
                 <ArrowRight className="w-5 h-5" />
-              </button>
+              </a>
             </div>
           </div>
         </div>
